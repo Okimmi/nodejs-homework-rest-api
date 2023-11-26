@@ -7,7 +7,14 @@ import { HttpError } from "../helpers/index.js";
 
 const getAll = async (req, res, next) => {
   try {
-    const result = await Contact.find();
+    const { _id: owner } = req.user;
+    const { page = 1, limit = 10, ...filterParams } = req.query;
+    const skip = (page - 1) * limit;
+    const filter = { owner, ...filterParams };
+    const result = await Contact.find(filter, "", { skip, limit }).populate(
+      "owner",
+      "email subscription"
+    );
     res.json(result);
   } catch (error) {
     next(error);
@@ -17,7 +24,9 @@ const getAll = async (req, res, next) => {
 const getById = async (req, res, next) => {
   try {
     const { contactId } = req.params;
-    const result = await Contact.findById(contactId);
+    const { _id: owner } = req.user;
+
+    const result = await Contact.findOne({ _id: contactId, owner });
     if (!result) {
       throw HttpError(404, `Not found`);
     }
@@ -31,11 +40,12 @@ const add = async (req, res, next) => {
   try {
     const { error } = contactAddSchema.validate(req.body);
 
-    console.log(error);
     if (error) {
       throw HttpError(400, `Missing required name field`);
     }
-    const result = await Contact.create(req.body);
+
+    const { _id: owner } = req.user;
+    const result = await Contact.create({ ...req.body, owner });
     res.status(201).json(result);
   } catch (error) {
     next(error);
@@ -45,7 +55,8 @@ const add = async (req, res, next) => {
 const deleteById = async (req, res, next) => {
   try {
     const { contactId } = req.params;
-    const result = await Contact.findByIdAndDelete(contactId);
+    const { _id: owner } = req.user;
+    const result = await Contact.findOneAndDelete({ _id: contactId, owner });
     if (!result) {
       throw HttpError(404, `Not found`);
     }
@@ -63,10 +74,15 @@ const update = async (req, res, next) => {
       throw HttpError(400, error.message);
     }
     const { contactId } = req.params;
-    const result = await Contact.findByIdAndUpdate(contactId, req.body, {
-      new: true,
-      runValidators: true,
-    });
+    const { _id: owner } = req.user;
+    const result = await Contact.findOneAndUpdate(
+      { _id: contactId, owner },
+      req.body,
+      {
+        new: true,
+        runValidators: true,
+      }
+    );
     if (!result) {
       throw HttpError(404, `Not found`);
     }
@@ -84,10 +100,15 @@ const updateStatusContact = async (req, res, next) => {
       throw HttpError(400, "Missing field favorite");
     }
     const { contactId } = req.params;
-    const result = await Contact.findByIdAndUpdate(contactId, req.body, {
-      new: true,
-      runValidators: true,
-    });
+    const { _id: owner } = req.user;
+    const result = await Contact.findOneAndUpdate(
+      { _id: contactId, owner },
+      req.body,
+      {
+        new: true,
+        runValidators: true,
+      }
+    );
     if (!result) {
       throw HttpError(404, `Not found`);
     }
