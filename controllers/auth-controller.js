@@ -3,11 +3,18 @@ import User, {
   userRegisterSchema,
   userSignInSchema,
   userSubscriptionSchema,
+  userAvatarSchema,
 } from "../models/User.js";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
+import fs from "fs/promises";
+import path from "path";
+import gravatar from "gravatar";
+import jimp from "jimp";
 
 const { JWT_SECRET } = process.env;
+
+const avatarPath = path.resolve("public", "avatars");
 
 const register = async (req, res, next) => {
   try {
@@ -22,9 +29,15 @@ const register = async (req, res, next) => {
       throw HttpError(409, "Email in use");
     }
 
+    const avatarURL = gravatar.url(email).slice(2);
+
     const hashPassword = await bcrypt.hash(password, 10);
 
-    const result = await User.create({ ...req.body, password: hashPassword });
+    const result = await User.create({
+      ...req.body,
+      password: hashPassword,
+      avatarURL,
+    });
     res.status(201).json({
       user: { email: result.email, subscription: result.subscription },
     });
@@ -98,10 +111,43 @@ const updateSubscription = async (req, res, next) => {
   }
 };
 
+const updateAvatar = async (req, res, next) => {
+  try {
+    const { error } = userAvatarSchema.validate(req.body);
+    if (error) {
+      throw HttpError(400, error.message);
+    }
+
+    const { _id } = req.user;
+
+    const { path: oldPath, filename } = req.file;
+    const newPath = path.join(avatarPath, filename);
+
+    await fs.rename(oldPath, newPath);
+
+    const avatarURL = path.join("avatars", filename);
+
+    jimp.read(path.resolve("public", avatarURL), (err, img) => {
+      if (err) {
+        throw HttpError(400, err.message);
+      }
+      img.resize(250, 250).write(path.resolve("public", avatarURL));
+    });
+
+    await User.findByIdAndUpdate(_id, { avatarURL });
+    res.json({
+      avatarURL,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 export default {
   register,
   login,
   getCurrent,
   logout,
   updateSubscription,
+  updateAvatar,
 };
